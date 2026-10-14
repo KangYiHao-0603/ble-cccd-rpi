@@ -99,7 +99,40 @@ sudo ./examples/read_write/read_write 6F:86:F0:75:6A:2A write 00002222-0000-1000
 sudo ./examples/read_write/read_write 6F:86:F0:75:6A:2A read  00002222-0000-1000-8000-00805f9b34fb
 ```
 
-執行 write 後，LightBlue 的 log 會出現 write request，內容為 `0x1234`。
+#### 結果
+
+![gattlib read_write](../images/gattlib_read_write.png)
+
+```
+Value to write: 0x1234
+gattlib_read_write: Found bluetooth device '6F:86:F0:75:6A:2A'
+^C
+...
+Read UUID completed: 34 12 00 00 00 00 00 00
+```
+
+寫入 `0x1234` 後讀回 `34 12 00 00 00 00 00 00`，證明 C 程式透過 gattlib 成功寫入並讀取 iPhone 上的 characteristic `0x2222`。
+
+#### 為什麼是 `34 12 00 00 00 00 00 00`？
+
+範例程式以 `strtol()` 將命令列的 `0x1234` 轉成 `long`，再把這個變數在記憶體中的原始 bytes 寫出：
+
+- Raspberry Pi 的 ARM CPU 為 **little-endian**，低位元組在前，`0x1234` 在記憶體中是 `34 12`。
+- 64-bit 系統（aarch64，LP64）的 `long` 為 **8 bytes**，因此後面補上 6 個 `00`。
+
+所以實際傳送與讀回的資料都是 8 bytes：`34 12 00 00 00 00 00 00`。這與 Basic Problem 中將 CCCD `0x0002` 寫成 `02 00` 是同一個原理：BLE 中的多位元組數值以 little-endian 傳輸。
+
+#### write 卡住 / D-Bus 逾時
+
+```
+gattlib_read_write: Failed to write DBus GATT characteristic: Timeout was reached (161,24)
+gattlib_read_write: Error while writing GATT Characteristic with UUID 0x2222 (ret:268476696)
+```
+
+- `read_write` 使用需要對方回應的 **Write Request**。LightBlue 的 virtual device 有時收到資料後未及時回覆 Write Response，BlueZ 等待約 25 秒後回報逾時。
+- 第一次寫入 `0x1234` 時程式停在連線後的步驟，以 Ctrl+C 結束；但後續 read 讀回了寫入值，表示資料已送達，只是回應遺失。
+- 判斷方式：逾時後立刻執行 read，若讀回的是本次寫入的值，代表寫入已生效。
+- 改善方式：讓 LightBlue 保持前景、螢幕不鎖定，必要時關閉再開啟 virtual device，並重新取得 MAC 位址後重試。
 
 ## 4. bluepy 與 gattlib 比較
 
@@ -109,4 +142,10 @@ sudo ./examples/read_write/read_write 6F:86:F0:75:6A:2A read  00002222-0000-1000
 | 與藍牙堆疊的介面 | `bluepy-helper` 直接操作 HCI / L2CAP | BlueZ D-Bus API（`org.bluez.*`） |
 | CCCD 設定 | 直接對 CCCD handle 寫入 `02 00` | `gattlib_notification_start()` 由 BlueZ 處理 CCCD；或手動寫入 handle + 1 |
 | 優點 | 寫法簡潔，可直接控制 handle | 與系統 BlueZ 整合，可多程式共用藍牙 |
-| 遇到的問題 | 新版 BlueZ 拒絕 `scanend` | 新系統缺少 `libpcre`；D-Bus 物件走訪產生大量警告 |
+| 遇到的問題 | 新版 BlueZ 拒絕 `scanend` | 新系統缺少 `libpcre`；D-Bus 物件走訪產生大量警告；iOS 端 Write Response 遺失導致 D-Bus 逾時 |
+
+## 5. 結論
+
+- 成功在 Raspberry Pi 4（Debian trixie、BlueZ 5.82）上編譯並安裝 gattlib，過程中修正了範例對舊版 `libpcre` 的相依。
+- `ble_scan` 成功連線 iPhone 並列出完整的 GATT 表，其中 `0x2222` 的 properties `0x2A` 與 LightBlue 的設定一致。
+- `read_write` 成功以 C 語言寫入並讀回 characteristic 的值，並從結果觀察到 ARM 的 little-endian 與 `long` 的 8-byte 表示法。

@@ -2,7 +2,12 @@
 
 用 Python（bluepy）在 Raspberry Pi 上實作 **BLE Central**，連線到手機上的 GATT Server，並將目標 characteristic 的 **CCCD 設為 `0x0002`（開啟 Indication）**。
 
-加分題：在同一台 Pi 上編譯安裝 C 語言 BLE 函式庫 [gattlib](https://github.com/labapart/gattlib) 並執行其範例，詳見 [`docs/gattlib.md`](docs/gattlib.md)。
+加分題：在同一台 Pi 上編譯安裝 C 語言 BLE 函式庫 [gattlib](https://github.com/labapart/gattlib) 並執行其範例（`ble_scan`、`discover`、`read_write`），詳見 [`docs/gattlib.md`](docs/gattlib.md)。
+
+| 項目 | 內容 | 結果 |
+|---|---|---|
+| Basic Problem（85%） | Python BLE Central 將手機上 characteristic 的 CCCD 設為 `0x0002` | ✅ `Before: 0000 → After: 0200`，並收到 indication |
+| 加分題 | 編譯安裝 gattlib，執行範例 | ✅ `ble_scan` 列出 GATT 表；`read_write` 寫入 `0x1234` 並讀回 `34 12 00 00 00 00 00 00` |
 
 ## 架構
 
@@ -104,7 +109,7 @@ sudo python3 ble_central_cccd.py 2222
 │   └── gattlib.md           # 加分題：gattlib 編譯安裝與範例
 ├── scripts/
 │   └── build_gattlib.sh     # gattlib 一鍵編譯安裝腳本
-└── images/                  # Demo 截圖
+└── images/                  # Demo 截圖（Pi 終端機、LightBlue log、gattlib read_write）
 ```
 
 ## 參考資料
